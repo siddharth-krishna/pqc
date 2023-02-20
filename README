@@ -1,0 +1,79 @@
+------------------------------------------------------------------------
+PQC: QuickCheck in the Age of Concurrency
+
+An SMP parallel QuickCheck driver
+
+------------------------------------------------------------------------
+Quick start:
+------------------------------------------------------------------------
+
+Parallel batch driver for QuickCheck
+
+Run your properties in chunks over multiple cpus.
+
+Building (usual Cabal instructions):
+
+    $ runhaskell Setup.lhs configure 
+    $ runhaskell Setup.lhs build
+    $ runhaskell Setup.lhs install
+
+Example use in: examples/Example.hs
+
+------------------------------------------------------------------------
+Long story
+------------------------------------------------------------------------
+
+Do you:
+
+    * Have (or want) lots of QuickCheck properties? 
+    * Run them often (maybe on every darcs commit)? 
+    * Tired of waiting for the testsuite to finish? 
+    * Got a multi-core box with cpus sitting idle...? 
+    
+Yes? You need Parallel QuickCheck! 
+
+PQC provides a single module: Test.QuickCheck.Parallel.  This is a
+QuickCheck driver that runs property lists as jobs in parallel, and will
+utilise as many cores as you wish, with the SMP parallel GHC 6.6
+runtime. It is simple, scalable replacement for Test.QuickCheck.Batch.
+
+An example, on a 4 cpu linux server, running 20 quickcheck properties.
+
+    With 1 thread only:
+        $ time ./a.out
+        1: sort1                    : OK, 1000 tests.
+        1: sort2                    : OK, 1000 tests.
+        1: sort3                    : OK, 1000 tests.
+        1: sort4                    : OK, 1000 tests.
+        ...
+        ./a.out > x  18.94s user 0.01s system 99% cpu 18.963 total
+
+    18 seconds, 99% cpu. But I've got another 3 2.80GHz processors sitting
+    idle! Let's use them, to run the testsuite faster. No recompilation required.
+
+    4 OS threads, 4 Haskell threads:
+        $ time ./a.out +RTS -N4 > /dev/null
+        ./a.out +RTS -N4 > /dev/null  20.65s user 0.22s system 283% cpu 7.349 total
+
+    283% cpu, not bad. We're getting close to being limited by the
+    length of the longest running test.
+
+Or on a dual core macbook, thanks to Spencer Janssen for macbook data
+and testing:
+
+    1 thread:
+        ./Example 
+        17.256s
+
+    2 thread:
+        ./Example +RTS -N2 
+        10.402s
+
+Get it!
+
+    Homepage: http://hub.darcs.net/shelarcy/pqc
+    Haddocks: http://hackage.haskell.org/package/pqc
+    Example : http://hub.darcs.net/shelarcy/pqc/browse/examples/Example.hs
+
+    darcs get http://hub.darcs.net/shelarcy/pqc
+
