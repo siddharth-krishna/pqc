@@ -23,9 +23,10 @@ module Test.QuickCheck.Parallel (
                                  pRunWithNum,
                                  Name,
                                  Depth,
-                                 Test,
-                                 pDet,
-                                 pNon ) where
+                                 Test--,
+                                --  pDet,
+                                --  pNon
+                                 ) where
 
 import Test.QuickCheck
 import Test.QuickCheck.Gen  (unGen)
@@ -144,6 +145,7 @@ pRunInternal fork n depth tests = do
     thread work chan ec' me = loop
       where
         loop = do
+            -- TODO modifyMVar isn't atomic, would this cause work to be dropped sometime?
             job <- modifyMVar work $ \jobs -> return $ case jobs of
                         []     -> ([], Nothing)
                         (j:js) -> (js, Just j)
@@ -158,9 +160,9 @@ pRunInternal fork n depth tests = do
     doesAnyFailureTest :: Result -> TVar (ExitCode) -> IO ()
     doesAnyFailureTest v ec'
       = case v of
-          (GaveUp _ _ _)            -> noticeFailureTest ec'
+          (GaveUp _ _ _ _ _ _)            -> noticeFailureTest ec'
 #if MIN_VERSION_QuickCheck(2,6,0)
-          (Failure _ _ _ _ _ _ _ _) -> noticeFailureTest ec'
+          (Failure _ _ _ _ _ _ _ _ _ _ _ _ _) -> noticeFailureTest ec'
 #else
           (Failure _ _ _ _ _ _ _)   -> noticeFailureTest ec'
 #endif
@@ -175,65 +177,65 @@ pRunInternal fork n depth tests = do
         when (ec == ExitSuccess)
           $ writeTVar ec' testFailure
 
--- | Wrap a property, and run it on a deterministic set of data
-pDet :: Testable a => a -> Depth -> IO Result
-pDet a n = mycheck Det (stdArgs { maxSuccess = n }) a
+-- -- | Wrap a property, and run it on a deterministic set of data
+-- pDet :: Testable a => a -> Depth -> IO Result
+-- pDet a n = mycheck Det (stdArgs { maxSuccess = n }) a
 
--- | Wrap a property, and run it on a non-deterministic set of data
-pNon :: Testable a => a -> Depth -> IO Result
-pNon a n = mycheck NonDet (stdArgs { maxSuccess = n }) a
+-- -- | Wrap a property, and run it on a non-deterministic set of data
+-- pNon :: Testable a => a -> Depth -> IO Result
+-- pNon a n = mycheck NonDet (stdArgs { maxSuccess = n }) a
 
-data Mode = Det | NonDet
+-- data Mode = Det | NonDet
 
-------------------------------------------------------------------------
+-- ------------------------------------------------------------------------
 
-mycheck :: Testable a => Mode -> Args -> a -> IO Result
-mycheck Det config a = do
-    let rnd = mkStdGen 99  -- deterministic
-    mytests config rnd a
+-- mycheck :: Testable a => Mode -> Args -> a -> IO Result
+-- mycheck Det config a = do
+--     let rnd = mkStdGen 99  -- deterministic
+--     mytests config rnd a
 
-mycheck NonDet config a = do
-    rnd <- newStdGen       -- different each run
-    mytests config rnd a
+-- mycheck NonDet config a = do
+--     rnd <- newStdGen       -- different each run
+--     mytests config rnd a
 
-mytests :: Testable prop => Args -> StdGen -> prop -> IO Result
-mytests a rnd p =
-#if MIN_VERSION_QuickCheck(2,6,0)
-  withNullTerminal $ \tm -> do
-#else
-  do tm <- newNullTerminal
-#endif
-     test MkState{ terminal          = tm
-#if MIN_VERSION_QuickCheck(2,5,0)
-                 , maxSuccessTests   = if exhaustive p then 1 else maxSuccess a
-                 , maxDiscardedTests = if exhaustive p then maxDiscardRatio a else maxDiscardRatio a * maxSuccess a
-                 , numTotTryShrinks  = 0
-#else
-                 , maxSuccessTests   = maxSuccess a
-                 , maxDiscardedTests = maxDiscard a
-#endif
-                 , computeSize       = case replay a of
-                                         Nothing    -> computeSize'
-                                         Just (_,s) -> computeSize' `at0` s
-                 , numSuccessTests   = 0
-                 , numDiscardedTests = 0
-#if MIN_VERSION_QuickCheck(2,5,1)
-                 , numRecentlyDiscardedTests = 0
-#endif
-                 , collected         = []
-                 , expectedFailure   = False
-                 , randomSeed        = rnd
-                 , numSuccessShrinks = 0
-                 , numTryShrinks     = 0
-                 } (unGen (property p))
-  where computeSize' n d
-          -- e.g. with maxSuccess = 250, maxSize = 100, goes like this:
-          -- 0, 1, 2, ..., 99, 0, 1, 2, ..., 99, 0, 2, 4, ..., 98.
-          | n `roundTo` maxSize a + maxSize a <= maxSuccess a ||
-            n >= maxSuccess a ||
-            maxSuccess a `mod` maxSize a == 0 = (n `mod` maxSize a + d `div` 10) `min` maxSize a
-          | otherwise =
-            ((n `mod` maxSize a) * maxSize a `div` (maxSuccess a `mod` maxSize a) + d `div` 10) `min` maxSize a
-        n `roundTo` m = (n `div` m) * m
-        at0 _ s 0 0 = s
-        at0 f _ n d = f n d
+-- mytests :: Testable prop => Args -> StdGen -> prop -> IO Result
+-- mytests a rnd p =
+-- #if MIN_VERSION_QuickCheck(2,6,0)
+--   withNullTerminal $ \tm -> do
+-- #else
+--   do tm <- newNullTerminal
+-- #endif
+--      test MkState{ terminal          = tm
+-- #if MIN_VERSION_QuickCheck(2,5,0)
+--                  , maxSuccessTests   = if exhaustive p then 1 else maxSuccess a
+--                  , maxDiscardedTests = if exhaustive p then maxDiscardRatio a else maxDiscardRatio a * maxSuccess a
+--                  , numTotTryShrinks  = 0
+-- #else
+--                  , maxSuccessTests   = maxSuccess a
+--                  , maxDiscardedTests = maxDiscard a
+-- #endif
+--                  , computeSize       = case replay a of
+--                                          Nothing    -> computeSize'
+--                                          Just (_,s) -> computeSize' `at0` s
+--                  , numSuccessTests   = 0
+--                  , numDiscardedTests = 0
+-- #if MIN_VERSION_QuickCheck(2,5,1)
+--                  , numRecentlyDiscardedTests = 0
+-- #endif
+--                  , collected         = []
+--                  , expectedFailure   = False
+--                  , randomSeed        = rnd
+--                  , numSuccessShrinks = 0
+--                  , numTryShrinks     = 0
+--                  } (unGen (property p))
+--   where computeSize' n d
+--           -- e.g. with maxSuccess = 250, maxSize = 100, goes like this:
+--           -- 0, 1, 2, ..., 99, 0, 1, 2, ..., 99, 0, 2, 4, ..., 98.
+--           | n `roundTo` maxSize a + maxSize a <= maxSuccess a ||
+--             n >= maxSuccess a ||
+--             maxSuccess a `mod` maxSize a == 0 = (n `mod` maxSize a + d `div` 10) `min` maxSize a
+--           | otherwise =
+--             ((n `mod` maxSize a) * maxSize a `div` (maxSuccess a `mod` maxSize a) + d `div` 10) `min` maxSize a
+--         n `roundTo` m = (n `div` m) * m
+--         at0 _ s 0 0 = s
+--         at0 f _ n d = f n d
